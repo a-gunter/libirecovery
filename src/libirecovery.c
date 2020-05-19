@@ -2,7 +2,7 @@
  * libirecovery.c
  * Communication to iBoot/iBSS on Apple iOS devices via USB
  *
- * Copyright (c) 2011-2019 Nikias Bassen <nikias@gmx.li>
+ * Copyright (c) 2011-2020 Nikias Bassen <nikias@gmx.li>
  * Copyright (c) 2012-2015 Martin Szulecki <martin.szulecki@libimobiledevice.org>
  * Copyright (c) 2010 Chronic-Dev Team
  * Copyright (c) 2010 Joshua Hill
@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <ctype.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -45,14 +46,10 @@
 #include <IOKit/IOCFPlugIn.h>
 #include <pthread.h>
 #endif
-#define _FMT_qX "%qX"
-#define _FMT_016llx "%016llx"
 #else
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <setupapi.h>
-#define _FMT_qX "%I64X"
-#define _FMT_016llx "%016I64x"
 #ifndef sleep
 #define sleep(n) Sleep(1000 * n)
 #endif
@@ -159,6 +156,7 @@ static struct irecv_device irecv_devices[] = {
 	{ "iPhone12,1",  "n104ap",   0x04, 0x8030, "iPhone 11" },
 	{ "iPhone12,3",  "d421ap",   0x06, 0x8030, "iPhone 11 Pro" },
 	{ "iPhone12,5",  "d431ap",   0x02, 0x8030, "iPhone 11 Pro Max" },
+	{ "iPhone12,8",  "d79ap",    0x10, 0x8030, "iPhone SE (2020)" },
 	/* iPod */
 	{ "iPod1,1",     "n45ap",    0x02, 0x8900, "iPod Touch (1st gen)" },
 	{ "iPod2,1",     "n72ap",    0x00, 0x8720, "iPod Touch (2nd gen)" },
@@ -218,6 +216,10 @@ static struct irecv_device irecv_devices[] = {
 	{ "iPad8,6",     "j320xap",  0x18, 0x8027, "iPad Pro 3 12.9in (WiFi, 1TB)" },
 	{ "iPad8,7",     "j321ap",   0x0A, 0x8027, "iPad Pro 3 12.9in (Cellular)" },
 	{ "iPad8,8",     "j321xap",  0x1A, 0x8027, "iPad Pro 3 12.9in (Cellular, 1TB)" },
+	{ "iPad8,9",     "j417ap",   0x3C, 0x8027, "iPad Pro 4 11in (WiFi)" },
+	{ "iPad8,10",    "j418ap",   0x3E, 0x8027, "iPad Pro 4 11in (Cellular)" },
+	{ "iPad8,11",    "j420ap",   0x38, 0x8027, "iPad Pro 4 12.9in (WiFi)" },
+	{ "iPad8,12",    "j421ap",   0x3A, 0x8027, "iPad Pro 4 12.9in (Cellular)" },
 	{ "iPad11,1",    "j210ap",   0x14, 0x8020, "iPad Mini 5 (WiFi)" },
 	{ "iPad11,2",    "j211ap",   0x16, 0x8020, "iPad Mini 5 (Cellular)" },
 	{ "iPad11,3",    "j217ap",   0x1C, 0x8020, "iPad Air 3 (WiFi)" },
@@ -228,6 +230,17 @@ static struct irecv_device irecv_devices[] = {
 	{ "AppleTV3,2",  "j33iap",   0x00, 0x8947, "Apple TV 3 (2013)" },
 	{ "AppleTV5,3",  "j42dap",   0x34, 0x7000, "Apple TV 4" },
 	{ "AppleTV6,2",  "j105aap",  0x02, 0x8011, "Apple TV 4K" },
+	/* Apple T2 Coprocessor */
+	{ "iBridge2,1",	 "j137ap",   0x0A, 0x8012, "Apple T2 iMacPro1,1 (j137)" },
+	{ "iBridge2,3",	 "j680ap",   0x0B, 0x8012, "Apple T2 MacBookPro15,1 (j680)" },
+	{ "iBridge2,4",	 "j132ap",   0x0C, 0x8012, "Apple T2 MacBookPro15,2 (j132)" },
+	{ "iBridge2,5",	 "j174ap",   0x0E, 0x8012, "Apple T2 Macmini8,1 (j174)" },
+	{ "iBridge2,6",	 "j160ap",   0x0F, 0x8012, "Apple T2 MacPro7,1 (j160)" },
+	{ "iBridge2,7",	 "j780ap",   0x07, 0x8012, "Apple T2 MacBookPro15,3 (j780)" },
+	{ "iBridge2,8",	 "j140kap",  0x17, 0x8012, "Apple T2 MacBookAir8,1 (j140k)" },
+	{ "iBridge2,10", "j213ap",   0x18, 0x8012, "Apple T2 MacBookPro15,4 (j213)" },
+	{ "iBridge2,12", "j140aap",  0x37, 0x8012, "Apple T2 MacBookAir8,2 (j140a)" },
+	{ "iBridge2,14", "j152f",    0x3A, 0x8012, "Apple T2 MacBookPro16,1 (j152f)" },
 	{ NULL,          NULL,      -1,   -1,     NULL }
 };
 
@@ -317,6 +330,11 @@ static libusb_context* irecv_hotplug_ctx = NULL;
 
 static void _irecv_init(void)
 {
+	char* dbglvl = getenv("LIBIRECOVERY_DEBUG_LEVEL");
+	if (dbglvl) {
+		libirecovery_debug = strtol(dbglvl, NULL, 0);
+		irecv_set_debug_level(libirecovery_debug);
+	}
 #ifndef USE_DUMMY
 #ifndef WIN32
 #ifndef HAVE_IOKIT
@@ -442,7 +460,7 @@ static int irecv_get_string_descriptor_ascii(irecv_client_t client, uint8_t desc
 
 	if (ret < 0) return ret;
 	if (data[1] != 0x03) return IRECV_E_UNKNOWN_ERROR;
-	if (data[0] > ret) return IRECV_E_UNKNOWN_ERROR; 
+	if (data[0] > ret) return IRECV_E_UNKNOWN_ERROR;
 
 	for (di = 0, si = 2; si < data[0]; si += 2) {
 		if (di >= (size - 1)) break;
@@ -498,7 +516,7 @@ static void irecv_load_device_info_from_iboot_string(irecv_client_t client, cons
 
 	ptr = strstr(iboot_string, "ECID:");
 	if (ptr != NULL) {
-		sscanf(ptr, "ECID:" _FMT_qX, &client->device_info.ecid);
+		sscanf(ptr, "ECID:%" SCNx64, &client->device_info.ecid);
 	}
 
 	ptr = strstr(iboot_string, "IBFL:");
@@ -539,7 +557,7 @@ static void irecv_load_device_info_from_iboot_string(irecv_client_t client, cons
 		}
 		client->device_info.srtg = strdup(tmp);
 	}
-}	
+}
 
 static void irecv_copy_nonce_with_tag(irecv_client_t client, const char* tag, unsigned char** nonce, unsigned int* nonce_size)
 {
@@ -728,7 +746,7 @@ irecv_error_t mobiledevice_connect(irecv_client_t* client, unsigned long long ec
 					mobiledevice_closepipes(_client);
 					continue;
 				}
-				debug("found device with ECID " _FMT_016llx "\n", (unsigned long long)ecid);
+				debug("found device with ECID %016" PRIx64 "\n", (uint64_t)ecid);
 			}
 			found = 1;
 			break;
@@ -797,7 +815,7 @@ irecv_error_t mobiledevice_connect(irecv_client_t* client, unsigned long long ec
 				if (serial_str[j] == '_') {
 					serial_str[j] = ' ';
 				} else {
-					serial_str[j] = toupper(serial_str[j]);	
+					serial_str[j] = toupper(serial_str[j]);
 				}
 			}
 
@@ -810,7 +828,7 @@ irecv_error_t mobiledevice_connect(irecv_client_t* client, unsigned long long ec
 					mobiledevice_closepipes(_client);
 					continue;
 				}
-				debug("found device with ECID " _FMT_016llx" \n", (unsigned long long)ecid);
+				debug("found device with ECID %016" PRIx64 "\n", (uint64_t)ecid);
 			}
 			found = 1;
 			break;
@@ -963,7 +981,7 @@ IRECV_API int irecv_usb_control_transfer(irecv_client_t client, uint8_t bm_reque
 	packet->wValue = w_value;
 	packet->wIndex = w_index;
 	packet->wLength = w_length;
-	
+
 	if (bm_request_type < 0x80 && w_length > 0) {
 		memcpy(packet->data, data, w_length);
 	}
@@ -1357,7 +1375,7 @@ IRECV_API irecv_error_t irecv_open_with_ecid(irecv_client_t* pclient, unsigned l
 						irecv_close(client);
 						continue;
 					}
-					debug("found device with ECID " _FMT_016llx "\n", (unsigned long long)ecid);
+					debug("found device with ECID %016" PRIx64 "\n", (uint64_t)ecid);
 				}
 
 				error = irecv_usb_set_configuration(client, 1);
@@ -1807,7 +1825,7 @@ static void* _irecv_handle_device_add(void *userdata)
 
 	unsigned int pid = 0;
 	if (!p || (sscanf(p, "\\usb#vid_%*04x&pid_%04x#%s", &pid, serial_str) != 2) || (serial_str[0] == '\0')) {
-		fprintf(stderr, "%s: ERROR: failed to parse DevicePath?!\n", __func__);
+		debug("%s: ERROR: failed to parse DevicePath?!\n", __func__);
 		return NULL;
 	}
 	if (!_irecv_is_recovery_device(p)) {
@@ -1836,17 +1854,17 @@ static void* _irecv_handle_device_add(void *userdata)
 	IOUSBDeviceInterface **dev = iokit_ctx->dev;
 
 	if (!device) {
-		fprintf(stderr, "%s: ERROR: no device?!\n", __func__);
+		debug("%s: ERROR: no device?!\n", __func__);
 		return NULL;
 	}
 	if (!dev) {
-		fprintf(stderr, "%s: ERROR: no device interface?!\n", __func__);
+		debug("%s: ERROR: no device interface?!\n", __func__);
 		return NULL;
 	}
 
 	(*dev)->GetDeviceProduct(dev, &product_id);
 	if (!product_id) {
-		fprintf(stderr, "%s: ERROR: could not get product id?!\n", __func__);
+		debug("%s: ERROR: could not get product id?!\n", __func__);
 		return NULL;
 	}
 	CFNumberRef locationNum = (CFNumberRef)IORegistryEntryCreateCFProperty(device, CFSTR(kUSBDevicePropertyLocationID), kCFAllocatorDefault, 0);
@@ -1855,7 +1873,7 @@ static void* _irecv_handle_device_add(void *userdata)
 		CFRelease(locationNum);
 	}
 	if (!location) {
-		fprintf(stderr, "%s: ERROR: could not get locationID?!\n", __func__);
+		debug("%s: ERROR: could not get locationID?!\n", __func__);
 		return NULL;
 	}
 	CFStringRef serialString = (CFStringRef)IORegistryEntryCreateCFProperty(device, CFSTR(kUSBSerialNumberString), kCFAllocatorDefault, 0);
@@ -1871,7 +1889,7 @@ static void* _irecv_handle_device_add(void *userdata)
 
 	libusb_error = libusb_get_device_descriptor(device, &devdesc);
 	if (libusb_error != 0) {
-		fprintf(stderr, "%s: ERROR: failed to get device descriptor: %s\n", __func__, libusb_error_name(libusb_error));
+		debug("%s: ERROR: failed to get device descriptor: %s\n", __func__, libusb_error_name(libusb_error));
 		return NULL;
 	}
 	product_id = devdesc.idProduct;
@@ -1882,14 +1900,14 @@ static void* _irecv_handle_device_add(void *userdata)
 
 	libusb_error = libusb_open(device, &usb_handle);
 	if (usb_handle == NULL || libusb_error != 0) {
-		fprintf(stderr, "%s: ERROR: can't connect to device: %s\n", __func__, libusb_error_name(libusb_error));
+		debug("%s: ERROR: can't connect to device: %s\n", __func__, libusb_error_name(libusb_error));
 		libusb_close(usb_handle);
 		return 0;
 	}
 
 	libusb_error = libusb_get_string_descriptor_ascii(usb_handle, devdesc.iSerialNumber, (unsigned char*)serial_str, 255);
 	if (libusb_error < 0) {
-		fprintf(stderr, "%s: Failed to get string descriptor: %s\n", __func__, libusb_error_name(libusb_error));
+		debug("%s: Failed to get string descriptor: %s\n", __func__, libusb_error_name(libusb_error));
 		return 0;
 	}
 	libusb_close(usb_handle);
@@ -1958,15 +1976,15 @@ static void iokit_device_added(void *refcon, io_iterator_t iterator)
 	while ((device = IOIteratorNext(iterator))) {
 		kr = IOCreatePlugInInterfaceForService(device, kIOUSBDeviceUserClientTypeID, kIOCFPlugInInterfaceID, &plugInInterface, &score);
 		if ((kIOReturnSuccess != kr) || !plugInInterface) {
-			fprintf(stderr, "%s: ERROR: Unable to create a plug-in (%08x)\n", __func__, kr);
+			debug("%s: ERROR: Unable to create a plug-in (%08x)\n", __func__, kr);
 			kr = IOObjectRelease(device);
 			continue;
 		}
-		result = (*plugInInterface)->QueryInterface(plugInInterface, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID *)&dev);
+		result = (*plugInInterface)->QueryInterface(plugInInterface, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320), (LPVOID *)&dev);
 		(*plugInInterface)->Release(plugInInterface);
 
 		if (result || !dev) {
-			fprintf(stderr, "%s: ERROR: Couldn't create a device interface (%08x)\n", __func__, (int)result);
+			debug("%s: ERROR: Couldn't create a device interface (%08x)\n", __func__, (int)result);
 			kr = IOObjectRelease(device);
 			continue;
 		}
@@ -2021,7 +2039,7 @@ static int _irecv_usb_hotplug_cb(libusb_context *ctx, libusb_device *device, lib
 	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
 		THREAD_T th_device;
 		if (thread_new(&th_device, _irecv_handle_device_add, device) != 0) {
-			fprintf(stderr, "%s: FATAL: failed to create thread to handle device add\n", __func__);
+			debug("%s: FATAL: failed to create thread to handle device add\n", __func__);
 			return 0;
 		}
 		thread_detach(th_device);
@@ -2056,7 +2074,7 @@ static void *_irecv_event_handler(void* unused)
 		for (k = 0; guids[k]; k++) {
 			usbDevices = SetupDiGetClassDevs(guids[k], NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
 			if (!usbDevices) {
-				fprintf(stderr, "%s: ERROR: SetupDiGetClassDevs failed\n", __func__);
+				debug("%s: ERROR: SetupDiGetClassDevs failed\n", __func__);
 				return NULL;
 			}
 
@@ -2083,13 +2101,13 @@ static void *_irecv_event_handler(void* unused)
 				char driver[256];
 				driver[0] = '\0';
 				if (!SetupDiGetDeviceRegistryProperty(usbDevices, &devinfodata, SPDRP_DRIVER, &sz, (PBYTE)driver, sizeof(driver), NULL)) {
-					fprintf(stderr, "%s: ERROR: Failed to get driver key\n", __func__);
+					debug("%s: ERROR: Failed to get driver key\n", __func__);
 					free(details);
 					continue;
 				}
 				char *p = strrchr(driver, '\\');
 				if (!p) {
-					fprintf(stderr, "%s: ERROR: Failed to parse device location\n", __func__);
+					debug("%s: ERROR: Failed to parse device location\n", __func__);
 					free(details);
 					continue;
 				}
@@ -2188,7 +2206,7 @@ static void *_irecv_event_handler(void* unused)
 	do {
 		cnt = libusb_get_device_list(irecv_hotplug_ctx, &devs);
 		if (cnt < 0) {
-			fprintf(stderr, "%s: FATAL: Failed to get device list: %s\n", __func__, libusb_error_name(cnt));
+			debug("%s: FATAL: Failed to get device list: %s\n", __func__, libusb_error_name(cnt));
 			return NULL;
 		}
 
@@ -3175,7 +3193,7 @@ IRECV_API irecv_client_t irecv_reconnect(irecv_client_t client, int initial_paus
 		debug("Waiting %d seconds for the device to pop up...\n", initial_pause);
 		sleep(initial_pause);
 	}
-	
+
 	error = irecv_open_with_ecid_and_attempts(&new_client, ecid, 10);
 	if(error != IRECV_E_SUCCESS) {
 		return NULL;

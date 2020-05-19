@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.64)
-AC_INIT([libirecovery], [0.2.0], [https://github.com/libimobiledevice/libirecovery/issues],, [http://libimobiledevice.org])
+AC_INIT([libirecovery], [1.0.0], [https://github.com/libimobiledevice/libirecovery/issues],, [http://libimobiledevice.org])
 AM_INIT_AUTOMAKE([dist-bzip2 no-dist-gzip])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES])
 AC_CONFIG_SRCDIR([src/])
@@ -15,7 +15,7 @@ dnl libtool versioning
 #                 changes to the signature and the semantic)
 #  ? :+1 : ?   == just internal changes
 # CURRENT : REVISION : AGE
-LIBIRECOVERY_SO_VERSION=2:1:0
+LIBIRECOVERY_SO_VERSION=3:0:0
 
 dnl Minimum package versions
 LIBUSB_VERSION=1.0.3
@@ -41,9 +41,7 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
-AC_CHECK_FUNCS([strdup strerror strndup])
+AC_CHECK_FUNCS([strdup strerror strndup malloc realloc calloc])
 
 # Checks for libraries.
 AC_CHECK_HEADERS([readline/readline.h], [],
@@ -126,30 +124,6 @@ esac
 
 # check for large file support
 AC_SYS_LARGEFILE
-LFS_CFLAGS=''
-if test "$enable_largefile" != no; then
-	if test "$ac_cv_sys_file_offset_bits" != 'no'; then
-		LFS_CFLAGS="$LFS_CFLAGS -D_FILE_OFFSET_BITS=$ac_cv_sys_file_offset_bits"
-	else
-		AC_MSG_CHECKING(for native large file support)
-		AC_RUN_IFELSE([AC_LANG_SOURCE([#include <unistd.h>
-		  int main (int argc, char **argv)
-		  {
-		      exit(!(sizeof(off_t) == 8));
-		  }])],
-		[ac_cv_sys_file_offset_bits=64; AC_DEFINE(_FILE_OFFSET_BITS,64)
-		 AC_MSG_RESULT(yes)],
-		[AC_MSG_RESULT(no)])
-	fi
-	if test "$ac_cv_sys_large_files" != 'no'; then
-		LFS_CFLAGS="$LFS_CFLAGS -D_LARGE_FILES=1"
-	fi
-	AC_FUNC_FSEEKO
-	if test "$ac_cv_sys_largefile_source" != 'no'; then
-		LFS_CFLAGS="$LFS_CFLAGS -D_LARGEFILE_SOURCE=1"
-	fi
-fi
-AC_SUBST(LFS_CFLAGS)
 
 AC_ARG_WITH([udev],
 	AS_HELP_STRING([--with-udev],
