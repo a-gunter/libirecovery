@@ -3,7 +3,7 @@
  * Communication to iBoot/iBSS on Apple iOS devices via USB
  *
  * Copyright (c) 2011-2020 Nikias Bassen <nikias@gmx.li>
- * Copyright (c) 2012-2015 Martin Szulecki <martin.szulecki@libimobiledevice.org>
+ * Copyright (c) 2012-2020 Martin Szulecki <martin.szulecki@libimobiledevice.org>
  * Copyright (c) 2010 Chronic-Dev Team
  * Copyright (c) 2010 Joshua Hill
  * Copyright (c) 2008-2011 Nicolas Haunold
@@ -182,6 +182,7 @@ static struct irecv_device irecv_devices[] = {
 	{ "iPad3,6",     "p103ap",   0x04, 0x8955, "iPad 4 (Global)" },
 	{ "iPad4,1",     "j71ap",    0x10, 0x8960, "iPad Air (WiFi)" },
 	{ "iPad4,2",     "j72ap",    0x12, 0x8960, "iPad Air (Cellular)" },
+	{ "iPad4,3",     "j73ap",    0x14, 0x8960, "iPad Air (China)" },
 	{ "iPad4,4",     "j85ap",    0x0a, 0x8960, "iPad Mini 2 (WiFi)" },
 	{ "iPad4,5",     "j86ap",    0x0c, 0x8960, "iPad Mini 2 (Cellular)" },
 	{ "iPad4,6",     "j87ap",    0x0e, 0x8960, "iPad Mini 2 (China)" },
@@ -206,8 +207,8 @@ static struct irecv_device irecv_devices[] = {
 	{ "iPad7,4",     "j208ap",   0x06, 0x8011, "iPad Pro 10.5in (Cellular)" },
 	{ "iPad7,5",     "j71bap",   0x18, 0x8010, "iPad 6 (WiFi)" },
 	{ "iPad7,6",     "j72bap",   0x1A, 0x8010, "iPad 6 (Cellular)" },
-	{ "iPad7,11",    "j172ap",   0x1E, 0x8010, "iPad 7 (WiFi)" },
-	{ "iPad7,12",    "j171ap",   0x1C, 0x8010, "iPad 7 (Cellular)" },
+	{ "iPad7,11",    "j171ap",   0x1C, 0x8010, "iPad 7 (WiFi)" },
+	{ "iPad7,12",    "j172ap",   0x1E, 0x8010, "iPad 7 (Cellular)" },
 	{ "iPad8,1",     "j317ap",   0x0C, 0x8027, "iPad Pro 3 11in (WiFi)" },
 	{ "iPad8,2",     "j317xap",  0x1C, 0x8027, "iPad Pro 3 11in (WiFi, 1TB)" },
 	{ "iPad8,3",     "j318ap",   0x0E, 0x8027, "iPad Pro 3 11in (Cellular)" },
@@ -230,6 +231,9 @@ static struct irecv_device irecv_devices[] = {
 	{ "AppleTV3,2",  "j33iap",   0x00, 0x8947, "Apple TV 3 (2013)" },
 	{ "AppleTV5,3",  "j42dap",   0x34, 0x7000, "Apple TV 4" },
 	{ "AppleTV6,2",  "j105aap",  0x02, 0x8011, "Apple TV 4K" },
+	/* Apple Watch */
+	{ "Watch1,1",    "n27aap",   0x02, 0x7002, "Apple Watch 38mm (1st gen)" },
+	{ "Watch1,2",    "n28aap",   0x04, 0x7002, "Apple Watch 42mm (1st gen)" },
 	/* Apple T2 Coprocessor */
 	{ "iBridge2,1",	 "j137ap",   0x0A, 0x8012, "Apple T2 iMacPro1,1 (j137)" },
 	{ "iBridge2,3",	 "j680ap",   0x0B, 0x8012, "Apple T2 MacBookPro15,1 (j680)" },
@@ -241,7 +245,7 @@ static struct irecv_device irecv_devices[] = {
 	{ "iBridge2,10", "j213ap",   0x18, 0x8012, "Apple T2 MacBookPro15,4 (j213)" },
 	{ "iBridge2,12", "j140aap",  0x37, 0x8012, "Apple T2 MacBookAir8,2 (j140a)" },
 	{ "iBridge2,14", "j152f",    0x3A, 0x8012, "Apple T2 MacBookPro16,1 (j152f)" },
-	{ NULL,          NULL,      -1,   -1,     NULL }
+	{ NULL,          NULL,         -1,     -1, NULL }
 };
 
 #ifndef USE_DUMMY
@@ -658,9 +662,9 @@ typedef struct usb_control_request {
 
 irecv_error_t mobiledevice_openpipes(irecv_client_t client);
 void mobiledevice_closepipes(irecv_client_t client);
-irecv_error_t mobiledevice_connect(irecv_client_t* client, unsigned long long ecid);
+irecv_error_t mobiledevice_connect(irecv_client_t* client, uint64_t ecid);
 
-irecv_error_t mobiledevice_connect(irecv_client_t* client, unsigned long long ecid) {
+irecv_error_t mobiledevice_connect(irecv_client_t* client, uint64_t ecid) {
 	int found = 0;
 	SP_DEVICE_INTERFACE_DATA currentInterface;
 	HDEVINFO usbDevices;
@@ -1210,7 +1214,7 @@ static io_iterator_t iokit_usb_get_iterator_for_pid(UInt16 pid) {
 	return iterator;
 }
 
-static irecv_error_t iokit_open_with_ecid(irecv_client_t* pclient, unsigned long long ecid) {
+static irecv_error_t iokit_open_with_ecid(irecv_client_t* pclient, uint64_t ecid) {
 
 	io_service_t service, ret_service;
 	io_iterator_t iterator;
@@ -1288,7 +1292,7 @@ static irecv_error_t iokit_open_with_ecid(irecv_client_t* pclient, unsigned long
 #endif
 #endif
 
-IRECV_API irecv_error_t irecv_open_with_ecid(irecv_client_t* pclient, unsigned long long ecid) {
+IRECV_API irecv_error_t irecv_open_with_ecid(irecv_client_t* pclient, uint64_t ecid) {
 #ifdef USE_DUMMY
 	return IRECV_E_UNSUPPORTED;
 #else
@@ -1401,14 +1405,12 @@ IRECV_API irecv_error_t irecv_open_with_ecid(irecv_client_t* pclient, unsigned l
 				}
 
 				*pclient = client;
-
-				libusb_free_device_list(usb_device_list, 1);
-
 				ret = IRECV_E_SUCCESS;
 				break;
 			}
 		}
 	}
+	libusb_free_device_list(usb_device_list, 1);
 #endif
 #else
 	ret = mobiledevice_connect(pclient, ecid);
@@ -1627,7 +1629,7 @@ IRECV_API irecv_error_t irecv_reset(irecv_client_t client) {
 #endif
 }
 
-IRECV_API irecv_error_t irecv_open_with_ecid_and_attempts(irecv_client_t* pclient, unsigned long long ecid, int attempts) {
+IRECV_API irecv_error_t irecv_open_with_ecid_and_attempts(irecv_client_t* pclient, uint64_t ecid, int attempts) {
 #ifdef USE_DUMMY
 	return IRECV_E_UNSUPPORTED;
 #else
@@ -3183,7 +3185,7 @@ IRECV_API irecv_client_t irecv_reconnect(irecv_client_t client, int initial_paus
 	irecv_event_cb_t postcommand_callback = client->postcommand_callback;
 	irecv_event_cb_t disconnected_callback = client->disconnected_callback;
 
-	unsigned long long ecid = client->device_info.ecid;
+	uint64_t ecid = client->device_info.ecid;
 
 	if (check_context(client) == IRECV_E_SUCCESS) {
 		irecv_close(client);

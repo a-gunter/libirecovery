@@ -23,10 +23,13 @@
 #include "config.h"
 #endif
 
+#define TOOL_NAME "irecovery"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <libirecovery.h>
 #include <readline/readline.h>
@@ -43,6 +46,7 @@
 #define debug(...) if(verbose) fprintf(stderr, __VA_ARGS__)
 
 enum {
+	kNoAction,
 	kResetDevice,
 	kStartShell,
 	kSendCommand,
@@ -353,29 +357,49 @@ static void print_usage(int argc, char **argv) {
 	char *name = NULL;
 	name = strrchr(argv[0], '/');
 	printf("Usage: %s [OPTIONS]\n", (name ? name + 1: argv[0]));
-	printf("Interact with an iOS device in DFU or recovery mode.\n\n");
-	printf("options:\n");
-	printf("  -i ECID\tconnect to specific device by its ECID\n");
-	printf("  -c CMD\trun CMD on device\n");
-	printf("  -m\t\tprint current device mode\n");
-	printf("  -f FILE\tsend file to device\n");
-	printf("  -k FILE\tsend limera1n usb exploit payload from FILE\n");
-	printf("  -r\t\treset client\n");
-	printf("  -n\t\treboot device into normal mode (exit recovery loop)\n");
-	printf("  -e FILE\texecutes recovery script from FILE\n");
-	printf("  -s\t\tstart an interactive shell\n");
-	printf("  -q\t\tquery device info\n");
-	printf("  -v\t\tenable verbose output, repeat for higher verbosity\n");
-	printf("  -h\t\tprints this usage information\n");
 	printf("\n");
-	printf("Homepage: <" PACKAGE_URL ">\n");
+	printf("Interact with an iOS device in DFU or recovery mode.\n");
+	printf("\n");
+	printf("OPTIONS:\n");
+	printf("  -i, --ecid ECID\tconnect to specific device by its ECID\n");
+	printf("  -c, --command CMD\trun CMD on device\n");
+	printf("  -m, --mode\t\tprint current device mode\n");
+	printf("  -f, --file FILE\tsend file to device\n");
+	printf("  -k, --payload FILE\tsend limera1n usb exploit payload from FILE\n");
+	printf("  -r, --reset\t\treset client\n");
+	printf("  -n, --normal\t\treboot device into normal mode (exit recovery loop)\n");
+	printf("  -e, --script FILE\texecutes recovery script from FILE\n");
+	printf("  -s, --shell\t\tstart an interactive shell\n");
+	printf("  -q, --query\t\tquery device info\n");
+	printf("  -v, --verbose\t\tenable verbose output, repeat for higher verbosity\n");
+	printf("  -h, --help\t\tprints this usage information\n");
+	printf("  -V, --version\t\tprints version information\n");
+	printf("\n");
+	printf("Homepage:    <" PACKAGE_URL ">\n");
+	printf("Bug Reports: <" PACKAGE_BUGREPORT ">\n");
 }
 
 int main(int argc, char* argv[]) {
+	static struct option longopts[] = {
+		{ "ecid",    required_argument, NULL, 'i' },
+		{ "command", required_argument, NULL, 'c' },
+		{ "mode",    no_argument,       NULL, 'm' },
+		{ "file",    required_argument, NULL, 'f' },
+		{ "payload", required_argument, NULL, 'k' },
+		{ "reset",   no_argument,       NULL, 'r' },
+		{ "normal",  no_argument,       NULL, 'n' },
+		{ "script",  required_argument, NULL, 'e' },
+		{ "shell",   no_argument,       NULL, 's' },
+		{ "query",   no_argument,       NULL, 'q' },
+		{ "verbose", no_argument,       NULL, 'v' },
+		{ "help",    no_argument,       NULL, 'h' },
+		{ "version", no_argument,       NULL, 'V' },
+		{ NULL, 0, NULL, 0 }
+	};
 	int i = 0;
 	int opt = 0;
-	int action = 0;
-	unsigned long long ecid = 0;
+	int action = kNoAction;
+	uint64_t ecid = 0;
 	int mode = -1;
 	char* argument = NULL;
 	irecv_error_t error = 0;
@@ -388,7 +412,7 @@ int main(int argc, char* argv[]) {
 		return 0;
 	}
 
-	while ((opt = getopt(argc, argv, "i:vhrsmnc:f:e:k::q")) > 0) {
+	while ((opt = getopt_long(argc, argv, "i:vVhrsmnc:f:e:k:q", longopts, NULL)) > 0) {
 		switch (opt) {
 			case 'i':
 				if (optarg) {
@@ -452,10 +476,20 @@ int main(int argc, char* argv[]) {
 				action = kQueryInfo;
 				break;
 
+			case 'V':
+				printf("%s %s\n", TOOL_NAME, PACKAGE_VERSION);
+				return 0;
+
 			default:
 				fprintf(stderr, "Unknown argument\n");
 				return -1;
 		}
+	}
+
+	if (action == kNoAction) {
+		fprintf(stderr, "ERROR: Missing action option\n");
+		print_usage(argc, argv);
+		return -1;
 	}
 
 	if (verbose)
